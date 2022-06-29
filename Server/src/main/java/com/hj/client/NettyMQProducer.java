@@ -1,4 +1,5 @@
 package com.hj.client;
+
 import com.hj.core.MarshallingCodeCFactory;
 import com.hj.dto.DeliveryInfoEntity;
 import io.netty.bootstrap.Bootstrap;
@@ -15,15 +16,17 @@ import lombok.SneakyThrows;
 import java.net.InetSocketAddress;
 
 public class NettyMQProducer {
-    private static final String host = "127.0.0.1";
-    private static final int port = 900;
+    private final String host = "127.0.0.1";
+    private final int port = 900;
+    private String queueName = "mayikt";
 
-    private static String queueName = "mayikt";
-    private static Channel channel;
 
-    public void init(){
+    private NioEventLoopGroup group;
+    private ChannelFuture channelFuture;
+
+    public void init() {
         //创建nioEventLoopGroup
-        NioEventLoopGroup group = new NioEventLoopGroup();
+        group = new NioEventLoopGroup();
         Bootstrap bootstrap = new Bootstrap();
         bootstrap.group(group).channel(NioSocketChannel.class)
                 .remoteAddress(new InetSocketAddress(host, port))
@@ -36,38 +39,23 @@ public class NettyMQProducer {
                 });
         try {
             // 发起同步连接
-            ChannelFuture sync = bootstrap.connect().sync();
-            channel = sync.channel();
-            sync.channel().closeFuture().sync();
+            channelFuture = bootstrap.connect().sync();
         } catch (Exception e) {
 
         } finally {
-            group.shutdownGracefully();
         }
     }
 
-
-    public  void sendMsg(String msg) {
+    public void sendMsg(String msg) {
         DeliveryInfoEntity deliveryInfoEntity = new DeliveryInfoEntity(msg, queueName,
                 true);
-        channel.writeAndFlush(deliveryInfoEntity);
+        channelFuture.channel().writeAndFlush(deliveryInfoEntity);
     }
 
-    public static void main(String[] args) throws InterruptedException {
-        NettyMQProducer mqProducer = new NettyMQProducer();
 
-        new Thread(new Runnable() {
-            @SneakyThrows
-            @Override
-            public void run() {
-                Thread.sleep(2000);
-                mqProducer.sendMsg("每特教育第六期平均突破3万月薪1");
-                Thread.sleep(20000);
-                mqProducer.sendMsg("每特教育第六期平均突破3万月薪2");
-            }
-        }).start();
-        mqProducer.init();
-
-
+    public void close() {
+        group.shutdownGracefully();
     }
+
+
 }

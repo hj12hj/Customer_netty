@@ -5,6 +5,8 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * server消息处理器
@@ -12,13 +14,13 @@ import java.util.*;
 public class ServerHandler extends SimpleChannelInboundHandler<DeliveryInfoEntity> {
 
     /**
-     * 客户端列表
+     * 监听列表   主题加客户端
      */
-    private static Map<String, List<ChannelHandlerContext>> ctxs = new HashMap<String, List<ChannelHandlerContext>>();
+    public static Map<String, List<ChannelHandlerContext>> consumerMap = new ConcurrentHashMap<>();
     /**
-     * 消息列表
+     * 消息列表   主题加消息
      */
-    private static Map<String, Queue> queueMap = new HashMap<String, Queue>();
+    public static Map<String, Queue> msgMap = new ConcurrentHashMap();
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, DeliveryInfoEntity mqEntity) throws Exception {
@@ -28,52 +30,27 @@ public class ServerHandler extends SimpleChannelInboundHandler<DeliveryInfoEntit
         }
         boolean isProducer = mqEntity.getConnType();
         if (isProducer) {
-            producer(mqEntity);
-            return;
+            producerMsg(mqEntity);
+        } else {
+            registerConsumer(ctx, mqEntity);
         }
-        consumer(ctx, mqEntity);
     }
 
     /**
-     * 发送给消费者具体操作
-     * 1、保存客户端队列信息
-     * 2、如果队列中有值，则主动拉取
+     * 注册消费者
      */
-    private void consumer(ChannelHandlerContext ctx, DeliveryInfoEntity mqEntity) {
+    private void registerConsumer(ChannelHandlerContext ctx, DeliveryInfoEntity mqEntity) {
         String queueName = mqEntity.getQueueName();
-        Queue queue = queueMap.get(queueName);
-        List<ChannelHandlerContext> channelHandlerContexts = ctxs.get(queueName);
-        if (channelHandlerContexts == null) {
-            channelHandlerContexts = new ArrayList<ChannelHandlerContext>();
-        }
-        channelHandlerContexts.add(ctx);
-        ctxs.put(queueName, channelHandlerContexts);
-        if (queue == null || queue.isEmpty()) {
-            System.out.println("当前队列没有数据，直接返回");
-            return;
-        }
-        ctx.writeAndFlush(queue.poll());
+        consumerMap.putIfAbsent(mqEntity.getQueueName(), new ArrayList<>());
+        consumerMap.get(mqEntity.getQueueName()).add(ctx);
     }
 
     /**
-     * 生产者具体操作
-     * 1、如果队列不存在的话创建队列并加入数据
-     * 2、设置队列map
-     * 3、如果已经存在了客户端列表，则主动推送
+     * 存储推送的消息
      */
-    private void producer(DeliveryInfoEntity mqEntity) {
+    private void producerMsg(DeliveryInfoEntity mqEntity) {
         String queueName = mqEntity.getQueueName();
-        Queue queue = queueMap.get(queueName);
-        if (queue == null) {
-            queue = new LinkedList();
-        }
-        queue.offer(mqEntity);
-        queueMap.put(queueName, queue);
-        List<ChannelHandlerContext> channelHandlerContexts = ctxs.get(queueName);
-        if (channelHandlerContexts != null && channelHandlerContexts.size() > 0) {
-            for (ChannelHandlerContext ctx : channelHandlerContexts) {
-                ctx.writeAndFlush(queue.poll());
-            }
-        }
+        msgMap.putIfAbsent(mqEntity.getQueueName(), new LinkedList());
+        msgMap.get(mqEntity.getQueueName()).add(mqEntity);
     }
 }

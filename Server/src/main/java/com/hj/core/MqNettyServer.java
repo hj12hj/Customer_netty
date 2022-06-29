@@ -6,10 +6,17 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import lombok.extern.slf4j.Slf4j;
 
-public class MqNettyServer {
 
-    public static void start(){
+public class MqNettyServer extends Thread {
+
+    public void startHandleMsg(){
+        new HandleMagThread().start();
+    }
+
+    public  void init(){
+        startHandleMsg();
         NioEventLoopGroup bossGroup = new NioEventLoopGroup();
         NioEventLoopGroup workGroup = new NioEventLoopGroup();
         ServerBootstrap serverBootstrap = new ServerBootstrap();
@@ -36,10 +43,9 @@ public class MqNettyServer {
         }
     }
 
-
-    public static void main(String[] args) {
-        start();
+    @Override
+    public void run() {
+        init();
     }
-
 }
 
